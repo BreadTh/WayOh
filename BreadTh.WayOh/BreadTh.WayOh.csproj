@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <Authors>BreadTh</Authors>
+    <Company />
+    <Description>Basic Two-Track railway oriented programming for C#</Description>
+    <Copyright>BreadTh</Copyright>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <FileAlignment>2048</FileAlignment>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <FileAlignment>2048</FileAlignment>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="OneOf" Version="3.0.205" />
+  </ItemGroup>
+
+</Project>
