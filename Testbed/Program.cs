@@ -1,68 +1,90 @@
 ﻿using BreadTh.WayOh;
-using OneOf;
+using Newtonsoft.Json;
+using ValueOf;
 
-List<string> ledger = new();
-var rand = new Random();
+var orderFlow = Railroad<Error>
+    .Input<string>()
+    .Then(AttemptParseOrder)
+    .Then(AttemptValidateOrder)
+    .Then(AddOrderId)
+    //.Parallel(
+    //    track => track
+            .Then(AttemptMakeOrder)//,
+    //    track => track
+            .Then(CalculateTotal)
+            .Then(AttemptCreateInvoice)
+            .Then(AttemptMakeCustomerPAAY)
+    //)
+    .End();
 
-UnpeeledBanana inputBanana;
-if(rand.NextDouble() < 0.1)
-    inputBanana = null!;
-else
-    inputBanana = new UnpeeledBanana();
-
-await TwoTrack<Error>
-    .Start(new UnpeeledBanana())
-    .Then(AttemptPeel)
-    //.Then(AttemptReserveBlender())
-    //.Then(AttemptSlice)
-    //.Then(AttemptBlend)
-    .End(GetBackToCustomer);
-
-async Task<TwoTrackOutcome<BareBanana, Error>> AttemptPeel(UnpeeledBanana unpeeledBanana)
+async Task<string> MakeOrder(string rawOrder) 
 {
-    if (unpeeledBanana is null)
-        return new(new Error(ErrorType.OutOfFruit));
+    var (isError, value, error) = await orderFlow.Execute(rawOrder);
 
-    var (bareBanana, peel) = unpeeledBanana.Peel();
+    if (isError)
+        return error.ToString();
 
-    if (rand.NextDouble() < 0.1)
-        return new(new Error(ErrorType.Rotten));
+    return value;
+}
 
-    return new(bareBanana);
-};
-async Task GetBackToCustomer(OneOf<BareBanana, Error> result) =>
-    result.Switch(
-        (BareBanana banana) => HandleMilkshakeOutcome(banana),
-        (Error error) => ApologizeProfusely(TranslateErrorToExcuse(error))
-    );
+var acceptableRawOrder = "{\"Items\": [{\"Quantity\": 1, \"OrderName\": \"Cappuccino\"}]}";
+var malformedRawOrder =  "{\"Items\": [{\"Quantity\": 1, \"OrderName\": Cappuccino\"}]}";
+var invalidRawOrder =    "{\"Items\": [{\"Quantity\":-1, \"OrderName\": \"Cappuccino\"}]}";
 
-void HandleMilkshakeOutcome(BareBanana banana) =>
-    Console.WriteLine("Here's your banana milkshake!");
+Console.Write("Acceptable order: ");
+Console.WriteLine(await MakeOrder(acceptableRawOrder));
+Console.Write("Malformed order:  ");
+Console.WriteLine(await MakeOrder(malformedRawOrder));
+Console.Write("invalid order:    ");
+Console.WriteLine(await MakeOrder(invalidRawOrder));
 
-void ApologizeProfusely(string excuse) =>
-    Console.WriteLine($"We're so sorry esteemed Sir/Ma'am. We take full responsibility of course, but {excuse}!");
-
-string TranslateErrorToExcuse(Error error) =>
-    error.Type switch
+Juxt<Order, Error> AttemptParseOrder(string input) 
+{
+    try 
     {
-        ErrorType.OutOfFruit => "we ran out of fruit",
-        ErrorType.Rotten => "our fresh frut wasn't so fresh after all..",
-        ErrorType.MonkeyFuture => "the monkeys are coming!!",
-        _ => "we don't know what happened",
-    };
+        var output = JsonConvert.DeserializeObject<Order>(input);
+        
+        if(output is null)
+            return Error.OrderSyntaxError;
 
+        return output;
 
-
-public enum ErrorType { OutOfFruit, Rotten, MonkeyFuture }
-public record Error(ErrorType Type, string? Message = null);
-
-public class UnpeeledBanana
-{
-    public (BareBanana banana, BananaPeel peel) Peel() => 
-        (new BareBanana(), new BananaPeel());
+    }
+    catch (JsonException) 
+    {
+        return Error.OrderSyntaxError;
+    }
 }
-public class BareBanana 
+Juxt<Order, Error> AttemptValidateOrder(Order order) 
 {
+    if (order.IsValid)
+        return order;
+    else
+        return Error.OrderInvalid;
+}
+(Order, OrderId) AddOrderId(Order order) { return (order, OrderId.From(Guid.NewGuid())); }
+Juxt<bool, Error> AttemptMakeOrder((Order, OrderId) input) { return true; }
+Exception CalculateTotal(bool input) { return new Exception(); }
+Juxt<Guid, Error> AttemptCreateInvoice(Exception input) { return Guid.NewGuid(); }
+Juxt<string, Error> AttemptMakeCustomerPAAY(Guid input) { return "Hello"; }
+
+public enum Error { OrderSyntaxError, OrderInvalid }
+public enum OrderName { Cappuccino, CaffeLatte }
+public class Order 
+{
+    public Item[] Items { get; set; } = null!;
+    
+    public bool IsValid { get { return Items.All((item) => item.IsValid); } }
+    public class Item 
+    {
+        public int Quantity { get; set; }
+        public OrderName OrderName { get; set; }
+
+        public bool IsValid { get { return Quantity > 0; } }
+
+    }
 
 }
-public class BananaPeel { }
+
+class OrderId : ValueOf<Guid, OrderId>
+{ }
