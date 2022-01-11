@@ -1,9 +1,19 @@
 ﻿using BreadTh.WayOh;
+using Microsoft.Extensions.DependencyInjection;
 using Newtonsoft.Json;
+using System;
+using System.Linq;
+using System.Threading.Tasks;
 using ValueOf;
 
+var serviceCollection = new ServiceCollection();
+serviceCollection.AddTransient<AttemptCreateInvoice>();
+serviceCollection.AddTransient<FaultyGuidGenerator>();
+var serviceProvider = serviceCollection.BuildServiceProvider();
+
+
 var orderFlow = Railroad<Error>
-    .Input<string>()
+    .Input<string>(serviceProvider)
     .Then(AttemptParseOrder)
     .Then(AttemptValidateOrder)
     .Then(AddOrderId)
@@ -12,7 +22,7 @@ var orderFlow = Railroad<Error>
             .Then(AttemptMakeOrder)//,
     //    track => track
             .Then(CalculateTotal)
-            .Then(AttemptCreateInvoice)
+            .Then<AttemptCreateInvoice, Guid>()
             .Then(AttemptMakeCustomerPAAY)
     //)
     .End();
@@ -65,10 +75,44 @@ Juxt<Order, Error> AttemptValidateOrder(Order order)
 (Order, OrderId) AddOrderId(Order order) { return (order, OrderId.From(Guid.NewGuid())); }
 Juxt<bool, Error> AttemptMakeOrder((Order, OrderId) input) { return true; }
 Exception CalculateTotal(bool input) { return new Exception(); }
-Juxt<Guid, Error> AttemptCreateInvoice(Exception input) { return Guid.NewGuid(); }
+
 Juxt<string, Error> AttemptMakeCustomerPAAY(Guid input) { return "Hello"; }
 
-public enum Error { OrderSyntaxError, OrderInvalid }
+public class AttemptCreateInvoice : IRailroadStep<Exception, Guid, Error>
+{
+    private readonly FaultyGuidGenerator generator;
+
+    public AttemptCreateInvoice(FaultyGuidGenerator generator) 
+    {
+        this.generator = generator;
+    }
+
+    public Task<Juxt<Guid, Error>> Execute(Exception input)
+    {
+        try
+        {       
+            return Task.FromResult(new Juxt<Guid, Error>(generator.CreateGuidOrThrow()));
+        }
+        catch 
+        {
+            return Task.FromResult(new Juxt<Guid, Error>(Error.GuidGenerationIssue));
+        }
+
+    }
+}
+
+public class FaultyGuidGenerator 
+{
+    public Guid CreateGuidOrThrow() 
+    {
+        if(new Random().NextDouble() < 0.5)
+            throw new Exception();
+        else
+            return Guid.NewGuid();
+    }
+}
+
+public enum Error { OrderSyntaxError, OrderInvalid, GuidGenerationIssue }
 public enum OrderName { Cappuccino, CaffeLatte }
 public class Order 
 {
